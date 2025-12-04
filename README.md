@@ -1,7 +1,7 @@
 # **ECE1512 — Project B: Multi-Instance Learning (MIL) on BRACS**
 
 **University of Toronto — ECE1512: Machine Learning for Computer Vision**
-**Author:** Dennis Lan (denis7-jean)
+**Author:** Huiyao Lan
 
 This repository contains the full implementation, experiments, ablation studies, and result visualizations for **Project B: Multi-Instance Learning (MIL)** using the **BRACS histopathology dataset**.
 All experiments extend the **Attention-based Deep MIL (ABMIL)** framework.
