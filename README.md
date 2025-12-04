@@ -1,12 +1,10 @@
 # **ECE1512 — Project B: Multi-Instance Learning (MIL) on BRACS**
 
-**University of Toronto — ECE1512 (Machine Learning in Computer Vision)**
-**Author: Dennis Lan (denis7-jean)**
-This repository contains the full implementation, experiments, and results for **Project B — Multi-Instance Learning**, including:
+**University of Toronto — ECE1512: Machine Learning for Computer Vision**
+**Author:** Dennis Lan (denis7-jean)
 
-* Baseline training using ABMIL
-* Two ablation studies (architecture & loss function)
-* Reproducible configs, code, results, and plots
+This repository contains the full implementation, experiments, ablation studies, and result visualizations for **Project B: Multi-Instance Learning (MIL)** using the **BRACS histopathology dataset**.
+All experiments extend the **Attention-based Deep MIL (ABMIL)** framework.
 
 ---
 
@@ -15,99 +13,126 @@ This repository contains the full implementation, experiments, and results for *
 ```
 ProjectB_ECE1512/
 │
-├── main.py                     # Training script (modified)
-├── model.py                    # ABMIL model (with pooling modifications)
-├── dataloader.py               # HDF5 MIL dataset loader
-├── utils.py                    # Accuracy, metric logger, utilities
+├── main.py                     # Training script (modified for ablations)
+├── model.py                    # ABMIL model w/ attention & max pooling modes
+├── dataloader.py               # MIL dataloader for HDF5 features
+├── utils.py                    # Accuracy, metrics, reproducibility helpers
 │
-├── config/                     # YAML configs for BRACS / Camelyon
+├── ProjectB_ECE1512.ipynb      # Full Colab notebook (baseline + ablations)
+│
+├── config/
 │   ├── bracs_medical_ssl_config.yml
 │   ├── camelyon16_medical_ssl_config.yml
 │   └── camelyon17_medical_ssl_config.yml
 │
-├── results/                    # Baseline & Ablation outputs
-│   ├── baseline_bracs_best.json
-│   ├── baseline_bracs_history.json
-│   ├── baseline_bracs_val_acc.png
-│   ├── baseline_bracs_val_auc.png
-│   ├── baseline_bracs_val_f1.png
-│   ├── baseline_bracs_val_loss.png
-│   ├── ablation_bracs_max_ce_best.json
-│   ├── ablation_bracs_max_ce_history.json
-│   ├── ablation_bracs_attention_focal_best.json
-│   └── ablation_bracs_attention_focal_history.json
+├── figures/
+│   ├── baseline/               # Baseline training curves
+│   │   ├── baseline_bracs_val_acc.png
+│   │   ├── baseline_bracs_val_auc.png
+│   │   ├── baseline_bracs_val_f1.png
+│   │   └── baseline_bracs_val_loss.png
+│   └── ablation/
+│       └── ablation_comparison.png
 │
-└── dataset_csv/                # BRACS slide-to-label mapping
-    └── bracs.csv
+└── results/                    # JSON logs for reproducibility
+    ├── baseline_bracs_best.json
+    ├── baseline_bracs_history.json
+    ├── ablation_bracs_max_ce_best.json
+    ├── ablation_bracs_max_ce_history.json
+    ├── ablation_bracs_attention_focal_best.json
+    └── ablation_bracs_attention_focal_history.json
 ```
 
 ---
 
-# **2. Baseline: Attention-based MIL (ABMIL)**
+# **2. Baseline: Attention-Based MIL (ABMIL)**
 
-### **Model components**
+ABMIL (Ilse et al., 2018) learns **attention weights** over patch embeddings to perform bag-level classification — a better alternative to fixed pooling rules for WSI analysis.
 
-| Component      | Role                                                                  |
-| -------------- | --------------------------------------------------------------------- |
-| **Encoder**    | Pre-trained ViT-S/16 (Medical SSL), extracts 384-dim patch embeddings |
-| **Aggregator** | Attention MIL pooling (Ilse et al., 2018)                             |
-| **Classifier** | 2-layer MLP → 3-class softmax                                         |
+### **Model Components**
 
-### **Training details**
+| Component      | Role                                                       |
+| -------------- | ---------------------------------------------------------- |
+| **Encoder**    | Pre-extracted ViT-S/16 features (384-dim) from medical SSL |
+| **Aggregator** | Learnable attention pooling over all instances in a bag    |
+| **Classifier** | 2-layer MLP → Softmax over 3 BRACS classes                 |
+
+### **Training Details**
 
 * Dataset: **BRACS**
-* Optimizer: **AdamW**
 * Epochs: **50**
-* LR schedule: warmup + cosine decay
+* Optimizer: **AdamW**
 * Loss: **Cross-Entropy**
-* Batch size: 1 bag per iteration (standard MIL)
+* LR: Warmup + Cosine decay
+* Batch size: **1 bag** (standard MIL)
 
-### **Baseline Results (Validation)**
+---
 
-| Metric   | Best                    |
-| -------- | ----------------------- |
-| Accuracy | **42.2%**               |
-| AUC      | **0.541**               |
-| F1       | **0.36**                |
-| Loss     | decreasing to **1.075** |
+# **Baseline Training Curves**
 
-Plots are included in `/results/*.png`:
+### **Validation Accuracy**
 
-* Validation Accuracy
-* Validation AUC
-* Macro F1
-* Validation Loss
+![acc](figures/baseline/baseline_bracs_val_acc.png)
+
+### **Validation AUC**
+
+![auc](figures/baseline/baseline_bracs_val_auc.png)
+
+### **Macro F1 Score**
+
+![f1](figures/baseline/baseline_bracs_val_f1.png)
+
+### **Validation Loss**
+
+![loss](figures/baseline/baseline_bracs_val_loss.png)
+
+### **Baseline Performance**
+
+| Metric   | Best Value     |
+| -------- | -------------- |
+| Accuracy | **42.2%**      |
+| AUC      | **0.541**      |
+| F1 Score | **0.360**      |
+| Val Loss | ↓ to **1.075** |
 
 ---
 
 # **3. Ablation Studies**
 
-## **A) Architecture Ablation — Replace Attention with Max Pooling**
+We perform **two controlled ablation studies**, each modifying exactly *one* component.
 
-Modified in `model.py`:
+---
+
+# **A) Architecture Ablation — Replace Attention with Max Pooling**
+
+### **Modification**
+
+In `model.py`, aggregator changed from learnable attention → fixed max pooling:
 
 ```python
 if conf.pooling_mode == "max":
     bag_feat, _ = torch.max(feats, dim=1)
 else:
-    bag_feat = attention_pooling(...)
+    bag_feat = self.attention_pooling(...)
 ```
 
-### **Result Summary**
+### **Results**
 
-| Model                           | Val Acc | Val AUC | Val F1 |
-| ------------------------------- | ------- | ------- | ------ |
-| **Baseline: ABMIL (attention)** | 42.2%   | 0.541   | 0.36   |
-| **Max Pooling**                 | 30.6%   | 0.417   | 0.23   |
+| Model                 | Val Acc   | Val AUC   | Val F1   |
+| --------------------- | --------- | --------- | -------- |
+| **ABMIL (Attention)** | **42.2%** | **0.541** | **0.36** |
+| **Max Pooling**       | 30.6%     | 0.417     | 0.23     |
 
-**Observation:**
-Max pooling performs significantly worse → confirms **attention is essential** for learning discriminative patch importance in histopathology MIL.
+**Conclusion:**
+Max pooling significantly degrades performance → confirming **attention is essential** for identifying discriminative tumor patches.
 
 ---
 
-## **B) Loss Function Ablation — Focal Loss**
+# **B) Loss Function Ablation — Cross-Entropy vs Focal Loss**
 
-Modified in `main.py`:
+### **Modification**
+
+Added Focal Loss in `main.py`:
 
 ```python
 class FocalLoss(nn.Module):
@@ -115,46 +140,51 @@ class FocalLoss(nn.Module):
         ...
 ```
 
-### **Result Summary**
+### **Results**
 
-| Model           | Val Acc | Val AUC | Val F1 |
-| --------------- | ------- | ------- | ------ |
-| **Baseline CE** | 42.2%   | 0.541   | 0.36   |
-| **Focal Loss**  | 39.4%   | 0.518   | 0.34   |
+| Model          | Val Acc   | Val AUC   | Val F1   |
+| -------------- | --------- | --------- | -------- |
+| **CE Loss**    | **42.2%** | **0.541** | **0.36** |
+| **Focal Loss** | 39.4%     | 0.518     | 0.34     |
 
-**Observation:**
-Focal loss slightly decreases performance.
-This matches intuition → BRACS is *not* extremely imbalanced, so CE remains more stable.
+**Conclusion:**
+BRACS is not severely imbalanced → focal loss does **not** improve performance and may over-focus on rare difficult samples.
 
 ---
 
-# **4. Quantitative Summary Table**
+# **4. Combined Comparison Table**
 
-### **All Experiments Comparison**
-
-| Experiment            | Pooling   | Loss  | AUC       | Acc       | F1       |
+| Experiment            | Pooling   | Loss  | AUC       | Accuracy  | F1       |
 | --------------------- | --------- | ----- | --------- | --------- | -------- |
 | **Baseline**          | Attention | CE    | **0.541** | **42.2%** | **0.36** |
 | Architecture Ablation | Max       | CE    | 0.417     | 30.6%     | 0.23     |
 | Loss Ablation         | Attention | Focal | 0.518     | 39.4%     | 0.34     |
 
+### **Ablation Comparison Plot**
+
+![comparison](figures/ablation/ablation_comparison.png)
+
 ---
 
 # **5. How to Reproduce**
 
-### 1. Install dependencies
+### **Install Dependencies**
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Run baseline
+---
+
+### **Run Baseline (Attention + CE)**
 
 ```bash
 python main.py --config config/bracs_medical_ssl_config.yml
 ```
 
-### 3. Architecture Ablation (Max Pool)
+---
+
+### **Run Architecture Ablation (Max Pooling + CE)**
 
 ```bash
 python main.py --config config/bracs_medical_ssl_config.yml \
@@ -162,7 +192,9 @@ python main.py --config config/bracs_medical_ssl_config.yml \
     --loss_type ce
 ```
 
-### 4. Loss Ablation (Focal)
+---
+
+### **Run Loss Function Ablation (Attention + Focal)**
 
 ```bash
 python main.py --config config/bracs_medical_ssl_config.yml \
@@ -172,30 +204,32 @@ python main.py --config config/bracs_medical_ssl_config.yml \
 
 ---
 
-# **6. Notes on Code Modifications**
+# **6. Code Modifications Summary**
 
-To support ablations, we modified:
+### `main.py`
 
-### ✔ main.py
+* Added CLI args `--pooling_mode` and `--loss_type`
+* Implemented Focal Loss
+* Replaced `torchmetrics` with sklearn for Colab compatibility
+* Added saving of best results & per-epoch history
 
-* Added `--pooling_mode` and `--loss_type` arguments
-* Added FocalLoss implementation
-* Replaced torchmetrics with sklearn metrics for compatibility
+### `model.py`
 
-### ✔ model.py
+* Added Max Pooling option
+* Clean abstraction between attention vs fixed pooling
 
-* Added `max pooling` branch
-* Clean separation of attention pooling vs max pooling
+### `results/`
 
-### ✔ results/
-
-* All history & best metrics saved per experiment
-* All baseline plots generated from history json
+* All histories saved as JSON
+* Enables full reproducibility & plot regeneration
 
 ---
 
 # **7. References**
 
-* Ilse et al., *Attention-based Deep Multiple Instance Learning* (ICML 2018)
-* ACMIL implementation inspiration: [https://github.com/dazhangyu123/ACMIL](https://github.com/dazhangyu123/ACMIL)
-* BRACS dataset paper
+* Ilse, M., Tomczak, J., & Welling, M. (2018).
+  **Attention-based Deep Multiple Instance Learning**. *ICML.*
+* ACMIL Repository (for training loop inspiration):
+  [https://github.com/dazhangyu123/ACMIL](https://github.com/dazhangyu123/ACMIL)
+* BRACS Dataset Paper
+  (*Breast cancer subtype classification in histopathology*)
